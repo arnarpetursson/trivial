@@ -5,8 +5,22 @@
 #include <ctype.h>
 #include <stdio.h>
 
-void server_setup(struct sockaddr_in *server, unsigned short port_number, int* sockfd)
-{
+void get_filepath(const char* client_argv, const char* f_name, char* file_path){
+
+    size_t file_address_length = strlen(client_argv);
+    
+    size_t f_size = strlen(f_name);
+    size_t total = f_size + file_address_length + 2;
+
+    memset(file_path, 0, total);
+
+    strcat(file_path, client_argv);
+    strcat(file_path, "/");
+    strcat(file_path, f_name);
+    file_path[total-1] = 0;
+
+}
+void server_setup(struct sockaddr_in *server, unsigned short port_number, int* sockfd){
     *sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     memset(server, 0, sizeof(struct sockaddr_in));
     server->sin_family = AF_INET;
@@ -15,13 +29,14 @@ void server_setup(struct sockaddr_in *server, unsigned short port_number, int* s
     server->sin_port = htons(port_number);
     bind(*sockfd, (struct sockaddr *)server, (socklen_t) sizeof(struct sockaddr_in));
 }
-size_t file_to_buffer(FILE *fp, char* send_buffer){
+size_t file_to_buffer(FILE *fp, char* buffer_out){
 
     int c;
+    size_t index = 0;
     while(index != 512){
         c = fgetc(fp);
         if (c == EOF) return index;
-        send_buffer[index++] = (char)c;
+        buffer_out[index++] = (char)c;
     }
 
     return index;
@@ -56,50 +71,34 @@ int main(int argc, char** argv)
     fprintf(stdout, "Setup and bind complete\n");
     fflush(stdout);
 
+
+    fprintf(stdout, "Starting server loop\n");
+    fflush(stdout);
     for (;;) {
 
-
-        fprintf(stdout, "Starting server loop\n");
-        fflush(stdout);
-
+        // Wait to receive info/packet from client
         socklen_t len = (socklen_t) sizeof(client);
-        ssize_t n = recvfrom(sockfd, message, sizeof(message) - 1,
+        ssize_t n = recvfrom(sockfd, buffer_in, sizeof(buffer_in) - 1,
                              0, (struct sockaddr *) &client, &len);
-
-
 
         fprintf(stdout, "Something received...\n");
         fflush(stdout);
 
-        // char buffer[10] = {0, 1, 0, 0, 'R', 'A', 's', 's', '\0', 12};
-
-        if(message[0] != 0 && message[1] != 1)
+        // Checks the OP code if its not a RRQ
+        if(buffer_in[0] != 0 && buffer_in[1] != 1)
         {
-            sendto(sockfd, message, (size_t) n, 0, (struct sockaddr *) &client, len);
+            sendto(sockfd, buffer_in, (size_t) n, 0, (struct sockaddr *) &client, len);
         }
 
-        char send_buffer[516];
-        char delivery[512];
-
-        if(message[1] == 1) // Read request
+        // RRQ
+        if(buffer_in[1] == 1)
         {
-
             fprintf(stdout, "Received RRQ\n");
             fflush(stdout);
 
-            // Extracta filepath/name
-            size_t file_address_length = strlen(argv[2]); // lengdin á möppunafni
-            char* f_name = message + 2;
-            size_t f_size = strlen(f_name); // lengd á cock.txt
-            size_t total = f_size + file_address_length + 2;
-
-            char file_path[total]; // tómur array af stærð file og folder
-            memset(file_path, 0, total);
-
-            strcat(file_path, argv[2]);
-            strcat(file_path, "/");
-            strcat(file_path, f_name);
-            file_path[total-1] = 0;
+            char* f_name = buffer_in + 2;
+            char file_path[6969];
+            get_filepath(argv[2], f_name, file_path);
 
             fprintf(stdout, "File asked for: %s\n", file_path);
             fflush(stdout);
@@ -109,8 +108,8 @@ int main(int argc, char** argv)
             FILE *fp;
             fp = fopen(file_path, "r");
 
-            send_buffer[0] = 0;
-            send_buffer[1] = 3;
+            buffer_out[0] = 0;
+            buffer_out[1] = 3;
 
             unsigned short jenny_from_the_block_number = 1;
             
@@ -121,28 +120,28 @@ int main(int argc, char** argv)
                 //fflush(stdout);
 
 
-                send_buffer[2] = (jenny_from_the_block_number >> 8)&0xff;
-                send_buffer[3] = jenny_from_the_block_number&0xff;
+                buffer_out[2] = (jenny_from_the_block_number >> 8)&0xff;
+                buffer_out[3] = jenny_from_the_block_number&0xff;
                 
-                size_t count_read = file_to_buffer(fp, send_buffer + 4); 
+                size_t count_read = file_to_buffer(fp, buffer_out + 4); 
 
                 //fprintf(stdout, "count read = %zu\n", count_read);
                 //fflush(stdout);
                 
-                sendto(sockfd, send_buffer, count_read + 4, 0, 
+                sendto(sockfd, buffer_out, count_read + 4, 0, 
                     (struct sockaddr *) &client, len);
 
 
-                //fprintf(stdout, "Message sent\n");
+                //fprintf(stdout, "buffer_in sent\n");
                 //fflush(stdout);
 
                 // bíða eftir ackki
                 // þyggja ack
 
-                ssize_t n = recvfrom(sockfd, message, sizeof(message) - 1,
+                ssize_t n = recvfrom(sockfd, buffer_in, sizeof(buffer_in) - 1,
                              0, (struct sockaddr *) &client, &len);
 
-                //fprintf(stdout, "Message received\n");
+                //fprintf(stdout, "buffer_in received\n");
                 //fflush(stdout);
 
                 if(count_read < 512) break;
@@ -163,6 +162,6 @@ int main(int argc, char** argv)
 }
 
 /*
- sendto(sockfd, message, (size_t) n, 0,
+ sendto(sockfd, buffer_in, (size_t) n, 0,
                (struct sockaddr *) &client, len);
 */
