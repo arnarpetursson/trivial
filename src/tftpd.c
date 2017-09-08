@@ -4,6 +4,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 void get_filepath(const char* client_argv, const char* f_name, char* file_path){
 
@@ -84,6 +85,8 @@ int main(int argc, char** argv)
         fprintf(stdout, "Something received...\n");
         fflush(stdout);
 
+        // Store info on Client
+
         // Checks the OP code if its not a RRQ
         if(buffer_in[0] != 0 && buffer_in[1] != 1)
         {
@@ -115,6 +118,9 @@ int main(int argc, char** argv)
             
             //Transfer loop
             while(1){
+
+                // If not correct client 
+
                 buffer_out[2] = (block_number >> 8)&0xff;
                 buffer_out[3] = block_number&0xff;
                 
@@ -129,17 +135,36 @@ int main(int argc, char** argv)
                 ssize_t n = recvfrom(sockfd, buffer_in, sizeof(buffer_in) - 1,
                              0, (struct sockaddr *) &client, &len);
 
+                // The OP != ACK or wrong blocknumber try to send the request again
+                while(buffer_in[1] != 4 || buffer_in[3] != block_number){
+                        ssize_t sendto_validation = sendto(sockfd, buffer_out, count_read + 4, 0, 
+                            (struct sockaddr *) &client, len);
+                        if (sendto_validation != -1){
+                            fprintf(stdout, "While break1\n");
+                            fflush(stdout);
+                            break;
+                        }
+                        fprintf(stdout, "New while loop\n");
+                        fflush(stdout);
+                    }
+        
                 // If buffer < 512 == end of file
-                if(count_read < 512) break;
+                if(count_read < 512){
 
-                block_number++;
+                    fprintf(stdout, "coutn_read break\n");
+                    fflush(stdout);
+                    break;
+                }
+                
             }
 
             fprintf(stdout, "Transfer Over\n");
             fflush(stdout);
             
             fclose(fp);
+
         }
+        break;
         //printf("%hu\n", client.sin_port);        
     }
 }
