@@ -103,49 +103,36 @@ int main(int argc, char** argv)
             fprintf(stdout, "File asked for: %s\n", file_path);
             fflush(stdout);
 
-
             // Opna file
             FILE *fp;
             fp = fopen(file_path, "r");
 
+            // Setting OP code to 3(data)
             buffer_out[0] = 0;
             buffer_out[1] = 3;
 
-            unsigned short jenny_from_the_block_number = 1;
+            unsigned short block_number = 1;
             
-            int x = 1;
             //Transfer loop
             while(1){
-                //fprintf(stdout, "Iteration %d\n", x++);
-                //fflush(stdout);
-
-
-                buffer_out[2] = (jenny_from_the_block_number >> 8)&0xff;
-                buffer_out[3] = jenny_from_the_block_number&0xff;
+                buffer_out[2] = (block_number >> 8)&0xff;
+                buffer_out[3] = block_number&0xff;
                 
+                // Get byte size of the array
                 size_t count_read = file_to_buffer(fp, buffer_out + 4); 
-
-                //fprintf(stdout, "count read = %zu\n", count_read);
-                //fflush(stdout);
                 
+                // Sends the buffer
                 sendto(sockfd, buffer_out, count_read + 4, 0, 
                     (struct sockaddr *) &client, len);
 
-
-                //fprintf(stdout, "buffer_in sent\n");
-                //fflush(stdout);
-
-                // bíða eftir ackki
-                // þyggja ack
-
+                // receive info from client
                 ssize_t n = recvfrom(sockfd, buffer_in, sizeof(buffer_in) - 1,
                              0, (struct sockaddr *) &client, &len);
 
-                //fprintf(stdout, "buffer_in received\n");
-                //fflush(stdout);
-
+                // If buffer < 512 == end of file
                 if(count_read < 512) break;
-                jenny_from_the_block_number++;
+
+                block_number++;
             }
 
             fprintf(stdout, "Transfer Over\n");
@@ -153,15 +140,6 @@ int main(int argc, char** argv)
             
             fclose(fp);
         }
-
-        //size_t strlen
-        printf("%hu\n", client.sin_port);
-        
-        
+        //printf("%hu\n", client.sin_port);        
     }
 }
-
-/*
- sendto(sockfd, buffer_in, (size_t) n, 0,
-               (struct sockaddr *) &client, len);
-*/
