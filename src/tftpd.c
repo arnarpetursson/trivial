@@ -6,6 +6,27 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+typedef int bool;
+#define true 1
+#define false 0
+void transfer_error_msg(char number){
+    if(number != 1){
+        perror("RRQ not expected\0");
+    }
+    else if(number != 2){
+        perror("WRQ not expected\0");
+    }
+    else if(number != 3){
+        perror("DATA request not expected\0");
+    }
+    else if(number != 5){
+        perror("Error\0");
+    }
+    else{
+        perror("Undefined error");
+    }
+}
+
 void get_filepath(const char* client_argv, const char* f_name, char* file_path){
 
     size_t file_address_length = strlen(client_argv);
@@ -82,10 +103,8 @@ int main(int argc, char** argv)
         ssize_t n = recvfrom(sockfd, buffer_in, sizeof(buffer_in) - 1,
                              0, (struct sockaddr *) &client, &len);
 
-        fprintf(stdout, "Something received...\n");
+        fprintf(stdout, "A undisclosed client appeared\n");
         fflush(stdout);
-
-        // Store info on Client
 
         // Checks the OP code if its not a RRQ
         if(buffer_in[0] != 0 && buffer_in[1] != 1)
@@ -115,46 +134,60 @@ int main(int argc, char** argv)
             buffer_out[1] = 3;
 
             unsigned short block_number = 1;
-            
+            size_t count_read = 512;
+            unsigned short last_block_number = -69;
+            ssize_t resend = -1;
+
             //Transfer loop
-            while(1){
+            while(count_read == 512){
 
-                // If not correct client 
-
+                // TODO: If not correct client
                 buffer_out[2] = (block_number >> 8)&0xff;
                 buffer_out[3] = block_number&0xff;
                 
-                // Get byte size of the array
-                size_t count_read = file_to_buffer(fp, buffer_out + 4); 
-                
-                // Sends the buffer
-                sendto(sockfd, buffer_out, count_read + 4, 0, 
-                    (struct sockaddr *) &client, len);
-
-                // receive info from client
-                ssize_t n = recvfrom(sockfd, buffer_in, sizeof(buffer_in) - 1,
-                             0, (struct sockaddr *) &client, &len);
-
-                // The OP != ACK or wrong blocknumber try to send the request again
-                while(buffer_in[1] != 4 || buffer_in[3] != block_number){
-                        ssize_t sendto_validation = sendto(sockfd, buffer_out, count_read + 4, 0, 
-                            (struct sockaddr *) &client, len);
-                        if (sendto_validation != -1){
-                            fprintf(stdout, "While break1\n");
-                            fflush(stdout);
-                            break;
-                        }
-                        fprintf(stdout, "New while loop\n");
-                        fflush(stdout);
+                fprintf(stdout, "%hu\n", block_number);
+                fflush(stdout);
+                // Checks if the server needs to send the last packet
+                if (last_block_number == block_number){
+                    fprintf(stdout, "Resend loop started\n");
+                    fflush(stdout);
+                    while(resend == -1){
+                        resend = sendto(sockfd, buffer_out, count_read + 4, 0, 
+                        (struct sockaddr *) &client, len);
                     }
+                }
+                
+                // Get byte size of the array
+                count_read = file_to_buffer(fp, buffer_out + 4); 
+                
+                bool block_number_correct = false;        
+                // The OP != ACK or wrong blocknumber try to send the request again
+                while(block_number_correct == false){
+                    // Sends the buffer
+                    ssize_t sendto_validation = sendto(sockfd, buffer_out, count_read + 4, 0, 
+                        (struct sockaddr *) &client, len);
+                    // receive info from client
+                    ssize_t n = recvfrom(sockfd, buffer_in, sizeof(buffer_in) - 1,
+                             0, (struct sockaddr *) &client, &len);
+                    if(sendto_validation != -1){
+                        block_number_correct = true;
+                    }
+                }
+                // Checks if not ACK
+                if(buffer_in[1] != 4){
+                    transfer_error_msg(buffer_in[1]);
+                    break;
+                }
         
                 // If buffer < 512 == end of file
                 if(count_read < 512){
 
-                    fprintf(stdout, "coutn_read break\n");
+                    fprintf(stdout, "End of file \n");
                     fflush(stdout);
                     break;
                 }
+                last_block_number = block_number;
+                block_number++;
                 
             }
 
@@ -164,7 +197,5 @@ int main(int argc, char** argv)
             fclose(fp);
 
         }
-        break;
-        //printf("%hu\n", client.sin_port);        
     }
 }
