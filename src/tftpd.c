@@ -5,6 +5,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <arpa/inet.h>
 
 typedef int bool;
 #define true 1
@@ -69,6 +70,8 @@ int main(int argc, char** argv)
     struct sockaddr_in server, client;
     char buffer_in[516];
     char buffer_out[516];
+    char error_msg[169];
+    char opcode[4];
 
     fprintf(stdout, "Starting\n");
     fflush(stdout);
@@ -106,6 +109,9 @@ int main(int argc, char** argv)
         fprintf(stdout, "A undisclosed client appeared\n");
         fflush(stdout);
 
+        unsigned short client_port = client.sin_port;
+        unsigned short last_client_port = client_port;
+
         // Checks the OP code if its not a RRQ
         if(buffer_in[0] != 0 && buffer_in[1] != 1)
         {
@@ -121,13 +127,23 @@ int main(int argc, char** argv)
             char* f_name = buffer_in + 2;
             char file_path[6969];
             get_filepath(argv[2], f_name, file_path);
-
-            fprintf(stdout, "File asked for: %s\n", file_path);
+            char* client_ip = inet_ntoa(client.sin_addr);
+            
+            fprintf(stdout, "File %s requested from %s:%d \n", f_name, client_ip, client.sin_port);
             fflush(stdout);
 
+            if (strstr(file_path, "/../")){
+                // errorcode 02 access violation
+                continue;
+            }
+            
             // Opna file
             FILE *fp;
             fp = fopen(file_path, "r");
+
+            if(fp == NULL){
+                // error code 01 file not found
+            }
 
             // Setting OP code to 3(data)
             buffer_out[0] = 0;
@@ -141,12 +157,30 @@ int main(int argc, char** argv)
             //Transfer loop
             while(count_read == 512){
 
+                // Checks if another client is trying to intercept the transfer
+                if(client.sin_port == last_client_port){
+                    // TODO: Skoða með Jonna
+                    opcode[0] = 0;
+                    opcode[1] = 5;
+                    opcode[2] = 0;
+                    opcode[3] = 2;
+                    char* getout = "get out bastard";
+                    memset(error_msg, 0, strlen(getout) + strlen(opcode) + 1);
+                    strcat(error_msg, opcode);
+                    strcat(error_msg, getout);
+                    error_msg[strlen(getout) + strlen(opcode)] = 0;
+                    ssize_t getout_length = strlen(error_msg);
+                    sendto(sockfd, error_msg, getout_length, 0, 
+                        (struct sockaddr *) &client, len);
+
+                    fprintf(stdout, "%s\n", opcode);
+                    fflush(stdout);
+                }
+
                 // TODO: If not correct client
                 buffer_out[2] = (block_number >> 8)&0xff;
                 buffer_out[3] = block_number&0xff;
                 
-                fprintf(stdout, "%hu\n", block_number);
-                fflush(stdout);
                 // Checks if the server needs to send the last packet
                 if (last_block_number == block_number){
                     fprintf(stdout, "Resend loop started\n");
