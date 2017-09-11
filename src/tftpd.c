@@ -112,12 +112,10 @@ int main(int argc, char** argv)
     fflush(stdout);
 
     unsigned short port_number = atoi(argv[1]);
-    // Checks if the port number is legal
-    if(port_number < 0 || port_number > 65535){
-        perror("Illegal port number");
-        exit(1);
-    }
 
+    
+    fprintf(stdout, "Port number of the server: %hu\n", port_number);   
+    fflush(stdout);
     int sockfd = 0;
     
     fprintf(stdout, "Setting up and binding socket\n");
@@ -196,8 +194,6 @@ int main(int argc, char** argv)
                     continue;
                 }
 
-                // TODO: blocknumbercheck
-
                 // Converts block_number to bytes
                 buffer_out[2] = (block_number >> 8)&0xff;
                 buffer_out[3] = block_number&0xff;
@@ -221,10 +217,8 @@ int main(int argc, char** argv)
                     ssize_t sendto_validation = sendto(sockfd, buffer_out, count_read + 4, 0, 
                         (struct sockaddr *) &client, len);
                     // receive info from client
-                    ssize_t n = recvfrom(sockfd, buffer_in, sizeof(buffer_in) - 1,
-                             0, (struct sockaddr *) &client, &len);
-
-                    // TODO: Timeout check
+                    recvfrom(sockfd, buffer_in, sizeof(buffer_in) - 1,
+                        0, (struct sockaddr *) &client, &len);
 
                     if(sendto_validation != -1){
                         block_number_correct = true;
@@ -253,6 +247,10 @@ int main(int argc, char** argv)
             fprintf(stdout, "Transfer Over\n");
             fflush(stdout);
             fclose(fp);
+        }
+        else{
+            error_packet(&client, 2, len, &sockfd);
+            continue;
         }
     }
 }
